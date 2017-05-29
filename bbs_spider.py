@@ -5,7 +5,9 @@ import re
 import pandas
 import sys
 import os
+import time
 from selenium import webdriver
+from selenium.common.exceptions import WebDriverException,TimeoutException,NoSuchElementException
 from bs4 import BeautifulSoup, Comment, Tag
 from urllib.error import URLError;
 from collections import Counter
@@ -70,7 +72,6 @@ def p_text(texts, threshold):
     
     return (total)
 
-
     # 获取静态网页
     # response = urllib.request.urlopen(dataURL)
     # html = response.read()
@@ -79,21 +80,35 @@ def p_text(texts, threshold):
     # htmlCharsetEncoding = htmlCharsetGuess["encoding"]
     # htmlCode_decode = html.decode(htmlCharsetEncoding, 'ignore')
     # htmlCode_encode = htmlCode_decode.encode("UTF-8")
+
 def collect(dataURL, urlCount):
+    page = 1
+    TEXT = []
     print("处理 URL: %s" % (dataURL))
-    # 处理动态网页
-    # Safari用不了可以尝试PhantomJSh或者Chrome等浏览器
-    driver = webdriver.Safari()
-    driver.get(dataURL)
+    # 除了PhantomJS也可以尝试Chrome等浏览器
+    # option = webdriver.ChromeOptions()
+    # prefs = {'profile.default_content_setting_values' : 
+    #     {
+    #        'images' : 2,
+    #        'plugins': 2
+    #     }
+    # }
+    # option.add_experimental_option('prefs',prefs)
+    # driver = webdriver.Chrome(chrome_options=option)
+
+    driver = webdriver.PhantomJS(service_args=['--load-images=false'])
+    #不加载图片以加快网页加载速度
+    #driver.implicitly_wait(10)
+    #每个网页最多加载30秒，30秒内加载不出来就跳到下一个网页
+    driver.set_page_load_timeout(30)
+
     try:
-        pass
+        driver.get(dataURL)
     except Exception as e:
         print (e)
-        return 
-    finally:
-        html = driver.page_source
-    driver.quit()
+        return
 
+    html = driver.page_source
     soup = BeautifulSoup(html,"lxml")
 
     #去噪
@@ -126,14 +141,14 @@ def collect(dataURL, urlCount):
     #用正则表达式匹配时间
     #reg = re.compile("\d{4}[- ./]\d{1}[- ./]\d{1}|\d{4}[- ./]\d{1}[- ./]\d{2}|\d{4}[- ./]\d{2}[- ./]\d{1}|\d{4}[- ./]\d{2}[- ./]\d{2}|\d{2}[- ./]\d{2})
     #dates = soup.find_all(text = reg)
-
     dates = soup.find_all(isdate)
     date_tags = []
 
     #找出date对应的标签
     for date in dates:
         date_tags.append(''.join(findTag(date)['class']))
-    #print (date_tags)
+
+    #print (dates.string)
 
     #找出时间出现的次数
     date_appears = dict((a,date_tags.count(a)) for a in date_tags)
@@ -141,6 +156,7 @@ def collect(dataURL, urlCount):
         date_count = 0
     else:
         date_tag = max(date_tags, key=date_tags.count)
+        TEXT.append(soup.find(isdate).string)
         date_count = date_appears[date_tag]
 
 
@@ -182,16 +198,34 @@ def collect(dataURL, urlCount):
     #利用评估函数对这些class进行排序，选出最有可能是正文的
     text_class = max(class_and_probility.items(), key=lambda x:x[1])[0]
 
-    TEXT = []
-    for tag in soup.select('.'+text_class):
-        TEXT.append(tag.get_text().replace("\n","").replace("\r","").replace(" ","").replace("\t",""))
+    #自动翻页
+    while True:
+        print ("page=%s"%page)
+        for tag in soup.select('.'+text_class):
+            TEXT.append(tag.get_text().replace("\n","").replace("\r","").replace(" ","").replace("\t",""))
+        try:
+            #driver.find_element_by_partial_link_text("下一页").click()
+            driver.find_element_by_xpath("//a[contains(text(),'下一页')]").click()
+            time.sleep(2)
+        except TimeoutException:
+            print("页面 %s 打开超时"%(page))
+            page += 1
+            continue
+        except NoSuchElementException:
+            break
+        except WebDriverException as e:
+            print(e)
+            break
+        soup = BeautifulSoup(driver.page_source, "lxml")
+        page += 1
+
     #将文本以csv格式存入
-    #'num': list(range(1, len(soup.select('.'+text_class))+1)),
+    driver.quit()
     data = pandas.DataFrame({
         'TEXT' : TEXT
         })
     data.to_csv(os.path.dirname(__file__) + '/data/' + str(urlCount) +'.csv', encoding='utf-8', index=True)
-
+    
 if __name__ == '__main__':
     with open(os.path.dirname(__file__) + '/url_lists.txt', 'r') as url_lists:
         url_count = 0
@@ -199,16 +233,16 @@ if __name__ == '__main__':
         while True:
             url = url_lists.readline()
             if not url:
-            	break
+                break
             try:
-            	urllib.request.urlopen(url)
+                urllib.request.urlopen(url)
             except URLError as e:
-            	print("get URL:%s Failed!" % (url))
-            	print (e)
-            	continue
+                print("get URL:%s Failed!" % (url))
+                print (e)
+                continue
             else:
-            	collect(url,url_count)
-            	url_count += 1
+                collect(url,url_count)
+                url_count += 1
 
             
 
