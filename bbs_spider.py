@@ -1,17 +1,16 @@
 # -*- coding: utf-8 -*-
-import urllib.request;
-import chardet
-import re
-import pandas
-import sys
 import os
+import re
+import sys
 import time
+import pandas
+import chardet
+import urllib.request
 from selenium import webdriver
-from selenium.common.exceptions import WebDriverException,TimeoutException,NoSuchElementException
-from bs4 import BeautifulSoup, Comment, Tag
-from urllib.error import URLError;
 from collections import Counter
-
+from urllib.error import URLError
+from bs4 import BeautifulSoup, Comment, Tag
+from selenium.common.exceptions import WebDriverException,TimeoutException,NoSuchElementException
 
 def has_class(tag):
     return tag.has_attr('class')
@@ -154,6 +153,7 @@ def collect(dataURL, urlCount):
     date_appears = dict((a,date_tags.count(a)) for a in date_tags)
     if len(date_tags) == 0:
         date_count = 0
+        TEXT.append("No Time Found")
     else:
         date_tag = max(date_tags, key=date_tags.count)
         TEXT.append(soup.find(isdate).string)
