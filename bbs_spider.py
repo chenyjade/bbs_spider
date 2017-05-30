@@ -205,7 +205,7 @@ def collect(dataURL, urlCount):
             TEXT.append(tag.get_text().replace("\n","").replace("\r","").replace(" ","").replace("\t",""))
         try:
             #driver.find_element_by_partial_link_text("下一页").click()
-            driver.find_element_by_xpath("//a[contains(text(),'下一页')]").click()
+            driver.find_element_by_xpath("//a[contains(text(),'下页') or contains(text(),'下一页')]").click()
             time.sleep(2)
         except TimeoutException:
             print("页面 %s 打开超时"%(page))
